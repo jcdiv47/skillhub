@@ -1,0 +1,46 @@
+[package]
+name = "skillhub"
+version = "0.2.0"
+edition = "2024"
+description = "Manage agent skills across the projects on your machine."
+publish = false
+
+[features]
+# Headless runs (`--snap`, `--tree`, `--script`) in release builds; debug builds always take them.
+tooling = ["rune/tooling"]
+
+[dependencies]
+# Rune is pre-release: one `dev` rev for it, its kit and every patch below.
+rune = { git = "https://github.com/anomalyco/rune", rev = "631e8a67cb3c40225efa3f6c4f57b80e7b18f190", default-features = false, features = [
+    "accessibility",
+    "dbus",
+    "embedded-fonts",
+    "metal-backend",
+    "native-file-dialog",
+    "svg",
+] }
+rune-kit = { git = "https://github.com/anomalyco/rune", rev = "631e8a67cb3c40225efa3f6c4f57b80e7b18f190", features = ["markdown"] }
+notify = "8"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+trash = "5"
+yaml-rust2 = "0.10"
+
+# Cargo doesn't inherit a dependency's patches: these are Rune's own, at the same rev.
+[patch.crates-io]
+winit = { git = "https://github.com/anomalyco/rune", rev = "631e8a67cb3c40225efa3f6c4f57b80e7b18f190" }
+parley_engine = { git = "https://github.com/anomalyco/rune", rev = "631e8a67cb3c40225efa3f6c4f57b80e7b18f190" }
+wgpu-hal = { git = "https://github.com/anomalyco/rune", rev = "631e8a67cb3c40225efa3f6c4f57b80e7b18f190" }
+accesskit_windows = { git = "https://github.com/anomalyco/rune", rev = "631e8a67cb3c40225efa3f6c4f57b80e7b18f190" }
+accesskit_macos = { git = "https://github.com/anomalyco/rune", rev = "631e8a67cb3c40225efa3f6c4f57b80e7b18f190" }
+
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+debug = false
+opt-level = 1
+
+[profile.release]
+codegen-units = 16
+strip = true
