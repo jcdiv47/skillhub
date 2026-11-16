@@ -1,12 +1,12 @@
-//! The skill chosen: where it is, what is wrong with it, and its content, files and links.
+//! The skill chosen: where it is, what is wrong with it, and its content and links.
 
 use rune::{El, ScrollSpec, Tx, col, el, icon, row, text};
 use rune_kit::{
-    Collapsible, IconButton, IconButtonVariant, Kit, Markdown, Menu, MenuItem, Placement,
-    SegmentedControl,
+    Button, Collapsible, ControlSize, IconButton, IconButtonVariant, Kit, Markdown, Menu, MenuItem,
+    Placement, SegmentedControl,
 };
 
-use super::{empty, files, icons};
+use super::{empty, icons};
 use crate::app::{App, Dialog, Tab};
 use crate::skills::{Scope, Severity, Skill};
 
@@ -15,7 +15,7 @@ pub fn view(s: &App, k: &Kit, layer: &mut Vec<El>) -> El {
         return empty(
             k,
             "No skill selected",
-            "Choose a skill to see its content, files and links.",
+            "Choose a skill to see its content and links.",
         )
         .key("no-skill");
     };
@@ -26,7 +26,6 @@ pub fn view(s: &App, k: &Kit, layer: &mut Vec<El>) -> El {
         .unwrap_or_default();
     let body = match s.tab {
         Tab::Preview => preview(s, sk, k),
-        Tab::Files => files::view(s, sk, k, layer),
         Tab::Links => links_view(s, sk, &links, k),
     };
     col()
@@ -49,7 +48,6 @@ fn header(s: &App, sk: &Skill, links: usize, k: &Kit, layer: &mut Vec<El>) -> El
     let c = &k.c;
     let labels = [
         "Preview".to_owned(),
-        "Files".to_owned(),
         if links > 0 {
             format!("Links {links}")
         } else {
@@ -59,9 +57,16 @@ fn header(s: &App, sk: &Skill, links: usize, k: &Kit, layer: &mut Vec<El>) -> El
     let tabs = SegmentedControl::new(&labels, Some(s.tab as usize))
         .label("View")
         .fit()
-        .on_pick(|s: &mut App, i, _: &mut Tx| s.tab = [Tab::Preview, Tab::Files, Tab::Links][i])
+        .on_pick(|s: &mut App, i, _: &mut Tx| s.tab = [Tab::Preview, Tab::Links][i])
         .build(k)
         .key("tabs");
+    let edit = Button::new("Edit")
+        .control_size(ControlSize::Regular)
+        .help("Edit the skill's files")
+        .disabled(sk.real_path.is_none())
+        .on_press(|s: &mut App| s.open_editor())
+        .build(k)
+        .key("edit");
     let title = row()
         .key("title-row")
         .w_full()
@@ -79,6 +84,7 @@ fn header(s: &App, sk: &Skill, links: usize, k: &Kit, layer: &mut Vec<El>) -> El
                 .shrink(),
         )
         .child(tabs)
+        .child(edit)
         .child(actions(s, sk, k, layer));
     let mut head = col()
         .key("detail-header")
@@ -277,7 +283,7 @@ fn preview(s: &App, sk: &Skill, k: &Kit) -> El {
         .key("broken-link");
     }
     if !sk.has_skill_md {
-        return empty(k, "No SKILL.md", "Files lists what the folder holds.").key("no-skill-md");
+        return empty(k, "No SKILL.md", "Edit lists what the folder holds.").key("no-skill-md");
     }
     let m = &sk.meta;
     let mut page = col()

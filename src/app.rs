@@ -35,7 +35,6 @@ pub struct Sys {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Tab {
     Preview,
-    Files,
     Links,
 }
 
@@ -102,6 +101,8 @@ pub enum Pending {
     GoTo(PathBuf),
     File(PathBuf),
     NewFile,
+    /// Leaving the editor.
+    CloseEditor,
     Quit,
 }
 
@@ -140,6 +141,8 @@ pub struct App {
     pub front_open: bool,
     /// Whether the folders linked to another of the scope list their skills again.
     pub twins_open: bool,
+    /// Whether the files of the skill shown are open to edit, over the window.
+    pub editing: bool,
 
     pub dialog: Dialog,
     pub pending: Option<Pending>,
@@ -205,6 +208,7 @@ impl App {
             list_width,
             front_open: false,
             twins_open: false,
+            editing: false,
             dialog: Dialog::None,
             pending: None,
             select_open: false,
@@ -405,9 +409,10 @@ impl App {
             Pending::GoTo(path) => self.show_elsewhere(&path),
             Pending::File(path) => {
                 self.open_file(Some(&path));
-                self.tab = Tab::Files;
+                self.editing = true;
             }
             Pending::NewFile => self.dialog = Dialog::NewFile { rel: focused("") },
+            Pending::CloseEditor => self.editing = false,
             Pending::Quit => tx.quit(),
         }
     }
@@ -504,6 +509,7 @@ impl App {
 
     pub fn close_skill(&mut self) {
         self.skill_path = None;
+        self.editing = false;
         self.files.clear();
         self.menu_open = false;
         self.file_menu = None;
@@ -595,6 +601,24 @@ impl App {
         self.doc.changed = false;
         self.notify(tx, format!("Saved {}", base_name(&path)));
         self.reload();
+    }
+
+    /// Opens the files of the skill shown to edit.
+    pub fn open_editor(&mut self) {
+        if self.skill().is_some_and(|s| s.real_path.is_some()) {
+            self.editing = true;
+            self.doc.edit.focused = true;
+        }
+    }
+
+    /// Leaves the editor, after asking about edits not saved.
+    pub fn close_editor(&mut self) {
+        if self.dirty() {
+            self.pending = Some(Pending::CloseEditor);
+            self.dialog = Dialog::Discard;
+        } else {
+            self.editing = false;
+        }
     }
 
     /// Puts back what the file holds on disk.

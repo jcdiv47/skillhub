@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 use rune::{FileDialogOptions, TextEdit, Tx};
 
-use crate::app::{App, Dialog, Pending, Tab, base_name, focused, plural};
+use crate::app::{App, Dialog, Pending, base_name, focused, plural};
 use crate::skills::{self, AGENTS, Agent, File, Location, Scope};
 
 impl App {
@@ -172,8 +172,7 @@ impl App {
         self.dialog = Dialog::None;
         self.reload();
         self.show_skill(&path);
-        self.tab = Tab::Files;
-        self.doc.edit.focused = true;
+        self.open_editor();
         self.notify(tx, format!("Created {name}"));
     }
 

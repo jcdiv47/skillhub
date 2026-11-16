@@ -27,6 +27,7 @@ pub fn view(s: &App, cx: &mut Cx<App>) -> El {
     } else {
         shell(s, &k, cx, &mut layer)
     };
+    files::modal(s, &k, &mut layer);
     dialogs::build(s, &k, &mut layer);
     if let Some(n) = &s.notice {
         layer.push(toast(&n.text, &k));

@@ -1,4 +1,4 @@
-//! The files of a skill, beside the editor of the one open.
+//! The files of a skill, beside the editor of the one open, in a dialog over the window.
 
 use rune::{
     El, Key, KeyEvent, PointerPress, ScrollSpec, TextEdit, Tx, col, el, row, text, text_input,
@@ -12,18 +12,89 @@ use rune_kit::{
 
 use super::{empty, icons};
 use crate::app::{App, Dialog, Pending};
-use crate::skills::{File, Skill};
+use crate::skills::File;
 
 /// Past this much text the editor leaves syntax colours out, so typing stays quick.
 const MAX_HIGHLIGHT: usize = 200 * 1024;
 
-pub fn view(s: &App, sk: &Skill, k: &Kit, layer: &mut Vec<El>) -> El {
-    if sk.real_path.is_none() {
-        return empty(k, "The link is broken", "There are no files to show.").key("no-files");
-    }
+/// The editor over the window: the files of the skill shown, beside the one open.
+pub fn modal(s: &App, k: &Kit, layer: &mut Vec<El>) {
+    let Some(sk) = s.skill().filter(|_| s.editing) else {
+        return;
+    };
+    let c = &k.c;
+    let close = IconButton::new(k.glyph.close)
+        .variant(IconButtonVariant::Ghost)
+        .control_size(ControlSize::Regular)
+        .label("Close")
+        .on_press(|s: &mut App| s.close_editor())
+        .build(k)
+        .key("editor-close");
+    let head = row()
+        .key("editor-head")
+        .w_full()
+        .pl(16.0)
+        .pr(10.0)
+        .py(10.0)
+        .gap(8.0)
+        .center_y()
+        .child(
+            text(sk.name.clone())
+                .font(k.ty.ui_medium)
+                .color(c.text_base)
+                .truncate()
+                .shrink(),
+        )
+        .child(
+            text(s.short(&sk.path))
+                .font(k.ty.mono)
+                .color(c.text_faint)
+                .truncate_middle()
+                .shrink(),
+        )
+        .child(el().grow(1.0))
+        .child(close);
+    let panel = col()
+        .key("editor-dialog")
+        .role("dialog")
+        .label(format!("Edit {}", sk.name))
+        .w_full()
+        .max_w(1040.0)
+        .h_full()
+        .max_h(760.0)
+        .radius(8.0)
+        .fill(c.layer_01)
+        .child(head)
+        .child(el().w_full().h(1.0).fill(c.border_muted))
+        .child(view(s, k).grow(1.0).min_h(0.0))
+        .token_motion(k.motion.overlay);
+    let panel = k
+        .elevate(panel, &k.elevation.overlay)
+        .modal(true, |s: &mut App| s.close_editor());
+    layer.push(
+        el().key("editor-scrim")
+            .absolute(0.0, 0.0)
+            .w_full()
+            .h_full()
+            .fill(c.scrim)
+            .token_motion(k.motion.overlay)
+            .a11y_hidden(),
+    );
+    layer.push(
+        el().key("editor-layer")
+            .absolute(0.0, 0.0)
+            .w_full()
+            .h_full()
+            .padding(28.0)
+            .center()
+            .child(panel),
+    );
     if let Some((f, at)) = &s.file_menu {
         file_menu(f, *at, k, layer);
     }
+}
+
+fn view(s: &App, k: &Kit) -> El {
     // SKILL.md alone needs no list beside it: the editor's bar names it.
     let alone =
         matches!(s.files.as_slice(), [f] if s.doc.path.as_deref() == Some(f.path.as_path()));
