@@ -8,7 +8,7 @@ use std::rc::Rc;
 
 use rune::{Env, Key, KeyEvent, Mods, Runtime};
 
-use crate::app::{App, Dialog, Sys, Tab};
+use crate::app::{App, Dialog, Sys};
 use crate::config::Config;
 use crate::testing::{symlink, temp_dir, write};
 use crate::view;
@@ -292,7 +292,7 @@ fn skills_show_by_folder_with_only_what_stands_out() {
         "pi-only",
         "Fill and read PDF forms.",
     ]);
-    f.shows(&["×2"]); // pdf is in .agents and linked from .claude
+    f.hides(&["×2"]); // pdf in .agents and its link in .claude are one skill
     f.hides(&["Not created", "Empty"]);
 
     f.project("web");
@@ -310,7 +310,7 @@ fn skills_show_by_folder_with_only_what_stands_out() {
     f.shows(&["missing"]);
     f.skill(web.join("pdf"));
     f.shows(&[
-        "~/Code/web/.claude/skills/pdf",
+        ".claude/skills/pdf", // from the project's root
         "~/.agents/skills/pdf",
         "Fill and read PDF forms.",
         "Frontmatter · allowed-tools",
@@ -359,12 +359,57 @@ fn a_name_in_the_project_and_globally_counts_twice() {
 }
 
 #[test]
+fn a_folder_linked_to_another_folds_until_asked_for() {
+    let mut f = fixture(true);
+    let api = f.code.join("api");
+    symlink(api.join(".agents/skills"), &api.join(".claude/skills"));
+    f.rt.update(|s, _| s.reload());
+    f.settle();
+    f.project("api");
+    let twin = format!("skill:{}", api.join(".claude/skills/review").display());
+    f.shows(&[".agents/skills", ".claude/skills → .agents/skills"]);
+    assert!(
+        f.rt.find(&twin).is_none(),
+        "the linked folder lists nothing"
+    );
+    f.click("location:Claude");
+    f.click(&twin);
+    f.shows(&[".claude/skills/review", ".agents/skills/review"]);
+    // SKILL.md alone shows without a list beside it.
+    f.click("edit");
+    assert!(f.rt.find("file-list").is_none() && f.rt.find("new-file").is_some());
+    f.click("editor-close");
+
+    // The link folds wherever it is listed: here the first folder links to the second.
+    let web = f.code.join("web");
+    symlink(web.join(".claude/skills"), &web.join(".agents/skills"));
+    f.rt.update(|s, _| s.reload());
+    f.project("web");
+    f.shows(&[".agents/skills → .claude/skills", ".claude/skills"]);
+    let real = format!("skill:{}", web.join(".claude/skills/deploy").display());
+    assert!(
+        f.rt.find(&real).is_some(),
+        "the real folder lists its skills"
+    );
+}
+
+#[test]
+fn links_to_another_folder_of_the_name_count_once() {
+    let mut f = fixture(true);
+    symlink(f.shared("review"), &f.home.join(".claude/skills/review"));
+    f.rt.update(|s, _| s.reload());
+    f.project("api");
+    f.shows(&["×2"]);
+    f.hides(&["×3"]);
+}
+
+#[test]
 fn a_preview_link_opens_the_file_and_stays_inside_the_skill() {
     let mut f = fixture(true);
     f.skill(f.shared("pdf"));
     f.rt.update(|s, tx| s.follow_link("references/guide.md", tx));
     f.settle();
-    assert_eq!(f.app().tab, Tab::Files);
+    assert!(f.app().editing);
     assert_eq!(f.app().doc.path, Some(f.shared("pdf/references/guide.md")));
     f.rt.update(|s, tx| s.follow_link("../../../escape", tx));
     assert_eq!(f.app().doc.path, Some(f.shared("pdf/references/guide.md")));
@@ -375,7 +420,7 @@ fn edits_save_through_a_link_and_follow_the_disk() {
     let mut f = fixture(true);
     f.project("web");
     f.skill(f.code.join("web/.claude/skills/pdf"));
-    f.press("Files");
+    f.click("edit");
     f.shows(&["SKILL.md", "references", "guide.md"]);
     f.hides(&["Save", "Revert"]);
     assert!(f.app().doc.editable && !f.app().dirty());
@@ -418,40 +463,41 @@ fn edits_save_through_a_link_and_follow_the_disk() {
 }
 
 #[test]
-fn edits_not_saved_are_asked_about_before_moving_on() {
+fn edits_not_saved_are_asked_about_before_the_editor_closes() {
     let mut f = fixture(true);
     f.skill(f.shared("review"));
-    f.press("Files");
+    f.click("edit");
+    assert!(f.app().editing);
     f.edit("changed");
-    let pi = f.home.join(".pi/agent/skills/pi-only");
-    f.skill(pi.clone());
+    f.click("editor-close");
     f.shows(&["Save changes to SKILL.md?"]);
-    assert_eq!(
-        f.app().skill_path,
-        Some(f.shared("review")),
-        "it stays until answered"
-    );
+    assert!(f.app().editing, "it stays until answered");
     f.click("cancel");
-    assert!(f.app().dirty());
-    f.skill(pi.clone());
+    assert!(f.app().dirty() && f.app().editing);
+    f.click("editor-close");
     f.click("discard");
-    assert_eq!(f.app().skill_path, Some(pi.clone()));
+    assert!(!f.app().editing && !f.app().dirty());
     assert_ne!(
         fs::read_to_string(f.shared("review/SKILL.md")).unwrap(),
         "changed"
     );
 
-    // Return saves, then goes on.
-    f.edit(&md("pi-only", "Saved from the guard.", ""));
-    f.project("web");
+    // Return saves, then closes. Escape asks as the button does.
+    f.click("edit");
+    f.edit(&md("review", "Saved from the guard.", ""));
+    f.key(Key::Escape, false);
     f.shows(&["Save changes to SKILL.md?"]);
     f.key(Key::Enter, false);
-    assert_eq!(f.app().scope, Some(f.code.join("web")));
+    assert!(!f.app().editing);
     assert!(
-        fs::read_to_string(pi.join("SKILL.md"))
+        fs::read_to_string(f.shared("review/SKILL.md"))
             .unwrap()
             .contains("Saved from the guard.")
     );
+    // With nothing to save it only closes.
+    f.click("edit");
+    f.click("editor-close");
+    assert!(!f.app().editing && matches!(f.app().dialog, Dialog::None));
 }
 
 #[test]
@@ -479,10 +525,11 @@ fn a_new_skill_goes_to_the_folder_chosen() {
         ("data-viz", "Draw charts.")
     );
     assert!(
-        f.app().skill_path == Some(p) && f.app().tab == Tab::Files && f.app().doc.editable,
+        f.app().skill_path == Some(p) && f.app().editing && f.app().doc.editable,
         "opened for editing"
     );
 
+    f.click("editor-close");
     f.click("new-skill");
     let claude =
         f.rt.elements()
@@ -664,7 +711,7 @@ fn removing_unlinks_a_link_and_trashes_a_folder() {
 fn files_are_made_and_deleted_from_the_list() {
     let mut f = fixture(true);
     f.skill(f.shared("review"));
-    f.press("Files");
+    f.click("edit");
     f.click("new-file");
     f.type_text("scripts/check.sh");
     f.click("confirm");
@@ -694,7 +741,7 @@ fn a_binary_file_is_not_edited() {
     fs::write(f.shared("review/logo.png"), b"\x89PNG\x00\x00").unwrap();
     f.rt.update(|s, _| s.reload());
     f.skill(f.shared("review"));
-    f.press("Files");
+    f.click("edit");
     f.click("file:logo.png");
     f.shows(&["A binary file (6 B)."]);
     assert!(!f.app().doc.editable);
@@ -725,7 +772,7 @@ fn folders_to_scan_are_added_and_removed() {
 fn every_button_has_a_name() {
     let mut f = fixture(true);
     f.skill(f.shared("pdf"));
-    f.press("Files");
+    f.click("edit");
     for e in f.rt.elements() {
         assert!(
             e.role != "button" || e.label.is_some_and(|l| !l.is_empty()),
@@ -760,7 +807,7 @@ fn paths_under_a_linked_home_read_with_a_tilde() {
 fn edits_stay_when_their_file_goes_from_the_disk() {
     let mut f = fixture(true);
     f.skill(f.shared("review"));
-    f.press("Files");
+    f.click("edit");
     f.edit(&md("review", "Mine.", ""));
     let p = f.shared("review/SKILL.md");
     fs::remove_file(&p).unwrap();
@@ -780,7 +827,7 @@ fn a_new_file_and_closing_ask_about_edits_first() {
         "nothing to save, nothing to ask"
     );
     f.skill(f.shared("review"));
-    f.press("Files");
+    f.click("edit");
     f.edit("unsaved");
     f.click("new-file");
     f.shows(&["Save changes to SKILL.md?"]);

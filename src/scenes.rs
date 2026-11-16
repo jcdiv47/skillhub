@@ -27,11 +27,11 @@ pub const SCENES: &[Scene] = &[
     }),
     ("files", |s| {
         pick(s, |sk| sk.has_skill_md);
-        s.tab = Tab::Files;
+        s.open_editor();
     }),
     ("edited", |s| {
         pick(s, |sk| sk.has_skill_md);
-        s.tab = Tab::Files;
+        s.open_editor();
         s.doc.edit.text.push_str("\nMore to say.\n");
     }),
     ("links", |s| {

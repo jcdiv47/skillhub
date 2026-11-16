@@ -48,9 +48,14 @@ fn on_key(s: &mut App, ev: &KeyEvent, tx: &mut Tx) -> bool {
     if !matches!(s.dialog, app::Dialog::None) || ev.mods.shift || ev.mods.alt {
         return false;
     }
-    if ev.is_command('s') {
-        s.save(tx);
-    } else if ev.is_command('n') && !s.welcome {
+    // So does the editor, but for saving.
+    if s.editing {
+        if ev.is_command('s') {
+            s.save(tx);
+        }
+        return ev.is_command('s');
+    }
+    if ev.is_command('n') && !s.welcome {
         s.open_new_skill();
     } else if ev.is_command('f') && !s.welcome {
         s.skill_query.focused = true;

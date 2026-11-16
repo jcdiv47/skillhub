@@ -27,7 +27,7 @@ pub fn view(s: &App, k: &Kit) -> El {
         )
         .header_padding(8.0, 6.0);
     let mut shown = 0;
-    for l in locations {
+    for (i, l) in locations.iter().enumerate() {
         let rows: Vec<El> = l
             .skills
             .iter()
@@ -39,10 +39,38 @@ pub fn view(s: &App, k: &Kit) -> El {
         if rows.is_empty() && l.err.is_none() {
             continue;
         }
-        let mut section = SidebarSection::new(rel_dir(l.agent, l.scope))
-            .key(format!("location:{}", l.agent.name()))
-            .count(l.skills.len());
-        if let Some(hop) = l.links.last() {
+        // A folder that is a link to one listed above holds the same skills: it folds to its
+        // title, unless the skill shown is one of its own.
+        let twin = l
+            .real_dir
+            .as_ref()
+            .filter(|_| !l.links.is_empty())
+            .and_then(|real| {
+                // The folder the link leads to, else a link to it listed above.
+                locations.iter().enumerate().find(|(j, o)| {
+                    *j != i && o.real_dir.as_ref() == Some(real) && (o.links.is_empty() || *j < i)
+                })
+            })
+            .map(|(_, o)| o);
+        let title = rel_dir(l.agent, l.scope);
+        let mut section = SidebarSection::new(match twin {
+            Some(o) => format!("{title} → {}", rel_dir(o.agent, o.scope)),
+            None => title.to_owned(),
+        })
+        .key(format!("location:{}", l.agent.name()));
+        if twin.is_some() {
+            let own = s
+                .skill_path
+                .as_deref()
+                .is_some_and(|p| l.skills.iter().any(|sk| sk.path == p));
+            let folded = !own && !s.twins_open;
+            section = section
+                .collapsed(folded)
+                .on_toggle(|s: &mut App, _: &mut Tx| s.twins_open = !s.twins_open);
+            if folded {
+                section = section.count(l.skills.len());
+            }
+        } else if let Some(hop) = l.links.last() {
             let tip = format!(
                 "A linked folder: {} → {}",
                 s.tilde(&hop.link),
@@ -105,8 +133,8 @@ fn skill_row(s: &App, sk: &Skill, k: &Kit) -> El {
     r.build(k).key(format!("skill:{}", sk.path.display()))
 }
 
-/// What stands out about a skill: it is a link, something is wrong with it, or others share
-/// its name. A plain, sound folder shows nothing.
+/// What stands out about a skill: it is a link, something is wrong with it, or another folder
+/// has its name. A plain, sound folder shows nothing.
 fn marks(s: &App, sk: &Skill, k: &Kit) -> Option<El> {
     let c = &k.c;
     let mut out = Vec::new();
@@ -152,20 +180,25 @@ fn marks(s: &App, sk: &Skill, k: &Kit) -> Option<El> {
                 .help(format!("A link to {to}")),
         );
     }
-    let same = s
+    // Links to the one folder are one skill; only another folder of the name competes with it.
+    let mut same: Vec<&Skill> = Vec::new();
+    for o in s
         .snap
         .as_ref()
         .map(|snap| snap.same(sk, s.scope()))
-        .unwrap_or_default();
+        .unwrap_or_default()
+    {
+        let real = o.real_path.as_ref();
+        if real.is_none()
+            || (real != sk.real_path.as_ref() && same.iter().all(|x| x.real_path.as_ref() != real))
+        {
+            same.push(o);
+        }
+    }
     if !same.is_empty() {
         let mut tip = format!("Also named {}:", sk.name);
         for o in &same {
-            let note = if o.real_path.is_some() && o.real_path == sk.real_path {
-                " (same folder)"
-            } else {
-                ""
-            };
-            tip.push_str(&format!("\n{}{note}", s.tilde(&o.path)));
+            tip.push_str(&format!("\n{}", s.tilde(&o.path)));
         }
         out.push(
             text(format!("×{}", same.len() + 1))

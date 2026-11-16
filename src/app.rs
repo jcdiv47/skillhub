@@ -35,7 +35,6 @@ pub struct Sys {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Tab {
     Preview,
-    Files,
     Links,
 }
 
@@ -102,6 +101,8 @@ pub enum Pending {
     GoTo(PathBuf),
     File(PathBuf),
     NewFile,
+    /// Leaving the editor.
+    CloseEditor,
     Quit,
 }
 
@@ -138,6 +139,10 @@ pub struct App {
     pub list_width: f32,
     /// The frontmatter's other fields show under the description.
     pub front_open: bool,
+    /// Whether the folders linked to another of the scope list their skills again.
+    pub twins_open: bool,
+    /// Whether the files of the skill shown are open to edit, over the window.
+    pub editing: bool,
 
     pub dialog: Dialog,
     pub pending: Option<Pending>,
@@ -202,6 +207,8 @@ impl App {
             sidebar,
             list_width,
             front_open: false,
+            twins_open: false,
+            editing: false,
             dialog: Dialog::None,
             pending: None,
             select_open: false,
@@ -402,9 +409,10 @@ impl App {
             Pending::GoTo(path) => self.show_elsewhere(&path),
             Pending::File(path) => {
                 self.open_file(Some(&path));
-                self.tab = Tab::Files;
+                self.editing = true;
             }
             Pending::NewFile => self.dialog = Dialog::NewFile { rel: focused("") },
+            Pending::CloseEditor => self.editing = false,
             Pending::Quit => tx.quit(),
         }
     }
@@ -501,6 +509,7 @@ impl App {
 
     pub fn close_skill(&mut self) {
         self.skill_path = None;
+        self.editing = false;
         self.files.clear();
         self.menu_open = false;
         self.file_menu = None;
@@ -594,6 +603,24 @@ impl App {
         self.reload();
     }
 
+    /// Opens the files of the skill shown to edit.
+    pub fn open_editor(&mut self) {
+        if self.skill().is_some_and(|s| s.real_path.is_some()) {
+            self.editing = true;
+            self.doc.edit.focused = true;
+        }
+    }
+
+    /// Leaves the editor, after asking about edits not saved.
+    pub fn close_editor(&mut self) {
+        if self.dirty() {
+            self.pending = Some(Pending::CloseEditor);
+            self.dialog = Dialog::Discard;
+        } else {
+            self.editing = false;
+        }
+    }
+
     /// Puts back what the file holds on disk.
     pub fn revert(&mut self) {
         if let Some(path) = self.doc.path.clone() {
@@ -656,6 +683,18 @@ impl App {
 
     pub fn reveal(&self, path: &Path) {
         (self.sys.reveal)(path);
+    }
+
+    /// A path as the skill's header shows it: from the root of the project shown when inside
+    /// it (the window's title names the root), else as [`App::tilde`].
+    pub fn short(&self, p: &Path) -> String {
+        let full = self.tilde(p);
+        let inside = self.scope().and_then(|root| {
+            full.strip_prefix(&self.tilde(root))?
+                .strip_prefix('/')
+                .map(str::to_owned)
+        });
+        inside.unwrap_or(full)
     }
 
     /// Writes a path under the home directory with `~`, the home directory as written or with

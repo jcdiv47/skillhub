@@ -1,4 +1,4 @@
-//! The files of a skill, beside the editor of the one open.
+//! The files of a skill, beside the editor of the one open, in a dialog over the window.
 
 use rune::{
     El, Key, KeyEvent, PointerPress, ScrollSpec, TextEdit, Tx, col, el, row, text, text_input,
@@ -12,64 +12,109 @@ use rune_kit::{
 
 use super::{empty, icons};
 use crate::app::{App, Dialog, Pending};
-use crate::skills::{File, Skill};
+use crate::skills::File;
 
 /// Past this much text the editor leaves syntax colours out, so typing stays quick.
 const MAX_HIGHLIGHT: usize = 200 * 1024;
 
-pub fn view(s: &App, sk: &Skill, k: &Kit, layer: &mut Vec<El>) -> El {
-    if sk.real_path.is_none() {
-        return empty(k, "The link is broken", "There are no files to show.").key("no-files");
-    }
+/// The editor over the window: the files of the skill shown, beside the one open.
+pub fn modal(s: &App, k: &Kit, layer: &mut Vec<El>) {
+    let Some(sk) = s.skill().filter(|_| s.editing) else {
+        return;
+    };
+    let c = &k.c;
+    let close = IconButton::new(k.glyph.close)
+        .variant(IconButtonVariant::Ghost)
+        .control_size(ControlSize::Regular)
+        .label("Close")
+        .on_press(|s: &mut App| s.close_editor())
+        .build(k)
+        .key("editor-close");
+    let head = row()
+        .key("editor-head")
+        .w_full()
+        .pl(16.0)
+        .pr(10.0)
+        .py(10.0)
+        .gap(8.0)
+        .center_y()
+        .child(
+            text(sk.name.clone())
+                .font(k.ty.ui_medium)
+                .color(c.text_base)
+                .truncate()
+                .shrink(),
+        )
+        .child(
+            text(s.short(&sk.path))
+                .font(k.ty.mono)
+                .color(c.text_faint)
+                .truncate_middle()
+                .shrink(),
+        )
+        .child(el().grow(1.0))
+        .child(close);
+    let panel = col()
+        .key("editor-dialog")
+        .role("dialog")
+        .label(format!("Edit {}", sk.name))
+        .w_full()
+        .max_w(1040.0)
+        .h_full()
+        .max_h(760.0)
+        .radius(8.0)
+        .fill(c.layer_01)
+        .child(head)
+        .child(el().w_full().h(1.0).fill(c.border_muted))
+        .child(view(s, k).grow(1.0).min_h(0.0))
+        .token_motion(k.motion.overlay);
+    let panel = k
+        .elevate(panel, &k.elevation.overlay)
+        .modal(true, |s: &mut App| s.close_editor());
+    layer.push(
+        el().key("editor-scrim")
+            .absolute(0.0, 0.0)
+            .w_full()
+            .h_full()
+            .fill(c.scrim)
+            .token_motion(k.motion.overlay)
+            .a11y_hidden(),
+    );
+    layer.push(
+        el().key("editor-layer")
+            .absolute(0.0, 0.0)
+            .w_full()
+            .h_full()
+            .padding(28.0)
+            .center()
+            .child(panel),
+    );
     if let Some((f, at)) = &s.file_menu {
         file_menu(f, *at, k, layer);
     }
-    row()
-        .key("files")
-        .w_full()
-        .h_full()
-        .min_h(0.0)
-        .child(list(s, k).w(208.0).h_full().min_h(0.0))
-        .child(
+}
+
+fn view(s: &App, k: &Kit) -> El {
+    // SKILL.md alone needs no list beside it: the editor's bar names it.
+    let alone = matches!(s.files.as_slice(), [f] if f.rel == "SKILL.md" && s.doc.path.as_deref() == Some(f.path.as_path()));
+    let mut pane = row().key("files").w_full().h_full().min_h(0.0);
+    if !alone {
+        pane = pane.child(list(s, k).w(208.0).h_full().min_h(0.0)).child(
             el().key("files-divider")
                 .w(1.0)
                 .h_full()
                 .fill(k.c.border_muted),
-        )
-        .child(editor(s, k).grow(1.0).min_w(0.0).h_full().min_h(0.0))
+        );
+    }
+    pane.child(editor(s, k).grow(1.0).min_w(0.0).h_full().min_h(0.0))
 }
 
 fn list(s: &App, k: &Kit) -> El {
-    let c = &k.c;
-    let add = IconButton::new(&icons::PLUS)
-        .variant(IconButtonVariant::GhostMuted)
-        .control_size(ControlSize::Small)
-        .label("New file")
-        .help("New file")
-        .on_press_tx(|s: &mut App, tx: &mut Tx| s.open_new_file(tx))
-        .build(k)
-        .key("new-file");
-    let head = row()
-        .key("files-head")
-        .w_full()
-        .h(28.0)
-        .pl(8.0)
-        .center_y()
-        .child(
-            text(crate::app::plural(s.files.len(), "item", "items"))
-                .font(k.ty.text_xsmall_medium)
-                .color(c.text_muted)
-                .grow(1.0),
-        )
-        .child(add);
-    let mut sb = Sidebar::new()
-        .label("Files")
-        .header(head)
-        .header_padding(8.0, 4.0);
+    let mut sb = Sidebar::new().label("Files");
     for f in &s.files {
         sb = sb.child(file_row(s, f, k));
     }
-    sb.build(k).key("file-list")
+    sb.build(k).key("file-list").pt(6.0)
 }
 
 fn file_row(s: &App, f: &File, k: &Kit) -> El {
@@ -150,16 +195,14 @@ fn file_menu(f: &File, at: PointerPress, k: &Kit, layer: &mut Vec<El>) {
 
 fn editor(s: &App, k: &Kit) -> El {
     let c = &k.c;
-    if s.doc.path.is_none() {
-        return empty(k, "No file open", "Choose a file to edit.").key("no-file");
-    }
     let rel = s.doc_rel();
     let dirty = s.dirty();
     let mut bar = row()
         .key("editor-bar")
         .w_full()
         .h(36.0)
-        .px(12.0)
+        .pl(12.0)
+        .pr(6.0)
         .gap(8.0)
         .center_y()
         .child(
@@ -171,17 +214,19 @@ fn editor(s: &App, k: &Kit) -> El {
                 .shrink(),
         );
     if dirty {
+        bar = bar.child(
+            el().key("edited")
+                .size(7.0, 7.0)
+                .radius(3.5)
+                .fill(c.bg_accent)
+                .label("Edited")
+                .help("Edited"),
+        );
+    }
+    bar = bar.child(el().grow(1.0));
+    if dirty {
         // Saving shows only once there is something to save.
         bar = bar
-            .child(
-                el().key("edited")
-                    .size(7.0, 7.0)
-                    .radius(3.5)
-                    .fill(c.bg_accent)
-                    .label("Edited")
-                    .help("Edited"),
-            )
-            .child(el().grow(1.0))
             .child(
                 Button::new("Revert")
                     .variant(ButtonVariant::Ghost)
@@ -204,11 +249,28 @@ fn editor(s: &App, k: &Kit) -> El {
                     .key("save"),
             );
     }
+    bar = bar.child(
+        IconButton::new(&icons::PLUS)
+            .variant(IconButtonVariant::GhostMuted)
+            .control_size(ControlSize::Small)
+            .label("New file")
+            .help("New file")
+            .on_press_tx(|s: &mut App, tx: &mut Tx| s.open_new_file(tx))
+            .build(k)
+            .key("new-file"),
+    );
     let mut pane = col()
         .key("editor-pane")
         .w_full()
         .child(bar)
         .child(el().w_full().h(1.0).fill(c.border_muted));
+    if s.doc.path.is_none() {
+        return pane.child(
+            empty(k, "No file open", "Choose a file to edit.")
+                .key("no-file")
+                .grow(1.0),
+        );
+    }
     if s.doc.changed {
         pane = pane.child(
             row()

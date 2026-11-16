@@ -11,16 +11,19 @@ built with [Rune](https://github.com/anomalyco/rune), a native GPU UI framework.
   `node_modules`, hidden folders and build outputs are skipped. Change them
   with **Folders…**.
 - **One thing at a time.** The sidebar picks a scope, the list shows its
-  skills under the folder each is in, and the pane shows the one chosen. A row
+  skills under the folder each is in, and the pane shows the one chosen. A
+  folder linked to another of the scope folds to its title. A row
   marks only what stands out: a link, a problem, a name used more than once.
   Folders with no skills are left out; **New Skill** names all three.
 - **Preview.** The description, then SKILL.md's body as Markdown with
   highlighted code. The rest of the frontmatter folds under its keys. Links to
   files of the skill open them in the editor.
-- **Files.** Every file under the skill's folder, in an editor with syntax
-  colours. Save and Revert show once there is something to save (⌘S). Saving
+- **Edit.** Opens the skill's files over the window: every file under its
+  folder, in an editor with syntax colours (SKILL.md alone shows without the
+  list). Save and Revert show once there is something to save (⌘S). Saving
   writes through links (the link stays a link). New file; delete from the
-  right-click menu (to the Trash; links are only unlinked).
+  right-click menu (to the Trash; links are only unlinked). Closing asks
+  about edits not saved.
 - **Links.** Where a link leads, hop by hop, and the other links to the same
   folder; each row goes to that skill.
 - **Actions (···).** Rename (updating `name:` and the links pointing at it),
