@@ -292,7 +292,7 @@ fn skills_show_by_folder_with_only_what_stands_out() {
         "pi-only",
         "Fill and read PDF forms.",
     ]);
-    f.shows(&["×2"]); // pdf is in .agents and linked from .claude
+    f.hides(&["×2"]); // pdf in .agents and its link in .claude are one skill
     f.hides(&["Not created", "Empty"]);
 
     f.project("web");
@@ -310,7 +310,7 @@ fn skills_show_by_folder_with_only_what_stands_out() {
     f.shows(&["missing"]);
     f.skill(web.join("pdf"));
     f.shows(&[
-        "~/Code/web/.claude/skills/pdf",
+        ".claude/skills/pdf", // from the project's root
         "~/.agents/skills/pdf",
         "Fill and read PDF forms.",
         "Frontmatter · allowed-tools",
@@ -356,6 +356,28 @@ fn a_name_in_the_project_and_globally_counts_twice() {
     let mut f = fixture(true);
     f.project("api");
     f.shows(&["review", "×2"]);
+}
+
+#[test]
+fn a_folder_linked_to_another_folds_until_asked_for() {
+    let mut f = fixture(true);
+    let api = f.code.join("api");
+    symlink(api.join(".agents/skills"), &api.join(".claude/skills"));
+    f.rt.update(|s, _| s.reload());
+    f.settle();
+    f.project("api");
+    let twin = format!("skill:{}", api.join(".claude/skills/review").display());
+    f.shows(&[".agents/skills", ".claude/skills → .agents/skills"]);
+    assert!(
+        f.rt.find(&twin).is_none(),
+        "the linked folder lists nothing"
+    );
+    f.click("location:Claude");
+    f.click(&twin);
+    f.shows(&[".claude/skills/review", ".agents/skills/review"]);
+    // SKILL.md alone shows without a list beside it.
+    f.press("Files");
+    assert!(f.rt.find("file-list").is_none() && f.rt.find("new-file").is_some());
 }
 
 #[test]

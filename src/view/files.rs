@@ -24,52 +24,27 @@ pub fn view(s: &App, sk: &Skill, k: &Kit, layer: &mut Vec<El>) -> El {
     if let Some((f, at)) = &s.file_menu {
         file_menu(f, *at, k, layer);
     }
-    row()
-        .key("files")
-        .w_full()
-        .h_full()
-        .min_h(0.0)
-        .child(list(s, k).w(208.0).h_full().min_h(0.0))
-        .child(
+    // SKILL.md alone needs no list beside it: the editor's bar names it.
+    let alone =
+        matches!(s.files.as_slice(), [f] if s.doc.path.as_deref() == Some(f.path.as_path()));
+    let mut pane = row().key("files").w_full().h_full().min_h(0.0);
+    if !alone {
+        pane = pane.child(list(s, k).w(208.0).h_full().min_h(0.0)).child(
             el().key("files-divider")
                 .w(1.0)
                 .h_full()
                 .fill(k.c.border_muted),
-        )
-        .child(editor(s, k).grow(1.0).min_w(0.0).h_full().min_h(0.0))
+        );
+    }
+    pane.child(editor(s, k).grow(1.0).min_w(0.0).h_full().min_h(0.0))
 }
 
 fn list(s: &App, k: &Kit) -> El {
-    let c = &k.c;
-    let add = IconButton::new(&icons::PLUS)
-        .variant(IconButtonVariant::GhostMuted)
-        .control_size(ControlSize::Small)
-        .label("New file")
-        .help("New file")
-        .on_press_tx(|s: &mut App, tx: &mut Tx| s.open_new_file(tx))
-        .build(k)
-        .key("new-file");
-    let head = row()
-        .key("files-head")
-        .w_full()
-        .h(28.0)
-        .pl(8.0)
-        .center_y()
-        .child(
-            text(crate::app::plural(s.files.len(), "item", "items"))
-                .font(k.ty.text_xsmall_medium)
-                .color(c.text_muted)
-                .grow(1.0),
-        )
-        .child(add);
-    let mut sb = Sidebar::new()
-        .label("Files")
-        .header(head)
-        .header_padding(8.0, 4.0);
+    let mut sb = Sidebar::new().label("Files");
     for f in &s.files {
         sb = sb.child(file_row(s, f, k));
     }
-    sb.build(k).key("file-list")
+    sb.build(k).key("file-list").pt(6.0)
 }
 
 fn file_row(s: &App, f: &File, k: &Kit) -> El {
@@ -150,16 +125,14 @@ fn file_menu(f: &File, at: PointerPress, k: &Kit, layer: &mut Vec<El>) {
 
 fn editor(s: &App, k: &Kit) -> El {
     let c = &k.c;
-    if s.doc.path.is_none() {
-        return empty(k, "No file open", "Choose a file to edit.").key("no-file");
-    }
     let rel = s.doc_rel();
     let dirty = s.dirty();
     let mut bar = row()
         .key("editor-bar")
         .w_full()
         .h(36.0)
-        .px(12.0)
+        .pl(12.0)
+        .pr(6.0)
         .gap(8.0)
         .center_y()
         .child(
@@ -171,17 +144,19 @@ fn editor(s: &App, k: &Kit) -> El {
                 .shrink(),
         );
     if dirty {
+        bar = bar.child(
+            el().key("edited")
+                .size(7.0, 7.0)
+                .radius(3.5)
+                .fill(c.bg_accent)
+                .label("Edited")
+                .help("Edited"),
+        );
+    }
+    bar = bar.child(el().grow(1.0));
+    if dirty {
         // Saving shows only once there is something to save.
         bar = bar
-            .child(
-                el().key("edited")
-                    .size(7.0, 7.0)
-                    .radius(3.5)
-                    .fill(c.bg_accent)
-                    .label("Edited")
-                    .help("Edited"),
-            )
-            .child(el().grow(1.0))
             .child(
                 Button::new("Revert")
                     .variant(ButtonVariant::Ghost)
@@ -204,11 +179,28 @@ fn editor(s: &App, k: &Kit) -> El {
                     .key("save"),
             );
     }
+    bar = bar.child(
+        IconButton::new(&icons::PLUS)
+            .variant(IconButtonVariant::GhostMuted)
+            .control_size(ControlSize::Small)
+            .label("New file")
+            .help("New file")
+            .on_press_tx(|s: &mut App, tx: &mut Tx| s.open_new_file(tx))
+            .build(k)
+            .key("new-file"),
+    );
     let mut pane = col()
         .key("editor-pane")
         .w_full()
         .child(bar)
         .child(el().w_full().h(1.0).fill(c.border_muted));
+    if s.doc.path.is_none() {
+        return pane.child(
+            empty(k, "No file open", "Choose a file to edit.")
+                .key("no-file")
+                .grow(1.0),
+        );
+    }
     if s.doc.changed {
         pane = pane.child(
             row()

@@ -96,8 +96,8 @@ fn header(s: &App, sk: &Skill, links: usize, k: &Kit, layer: &mut Vec<El>) -> El
     head
 }
 
-/// Where the skill is: its entry, and for a link the folder it leads to. The hops between are
-/// in Links.
+/// Where the skill is: its entry, and for a link the folder it leads to, each from the project's
+/// root when inside it. The hops between are in Links.
 fn place(s: &App, sk: &Skill, k: &Kit) -> El {
     let c = &k.c;
     let path = |key: &str, shown: String, ink| {
@@ -112,7 +112,7 @@ fn place(s: &App, sk: &Skill, k: &Kit) -> El {
     };
     let mut line = row().key("place").w_full().gap(6.0).center_y().child(path(
         "path",
-        s.tilde(&sk.path),
+        s.short(&sk.path),
         c.text_muted,
     ));
     if sk.broken {
@@ -137,7 +137,8 @@ fn place(s: &App, sk: &Skill, k: &Kit) -> El {
     } else if let Some(real) = sk
         .real_path
         .as_deref()
-        .filter(|real| sk.is_link || *real != sk.path)
+        // A folder reached through a link above the home folder reads the same both ways.
+        .filter(|real| s.short(real) != s.short(&sk.path))
     {
         line = line
             .child(
@@ -145,7 +146,7 @@ fn place(s: &App, sk: &Skill, k: &Kit) -> El {
                     .color(c.icon_faint)
                     .label("links to"),
             )
-            .child(path("real-path", s.tilde(real), c.text_muted));
+            .child(path("real-path", s.short(real), c.text_muted));
     }
     line
 }

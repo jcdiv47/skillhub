@@ -138,6 +138,8 @@ pub struct App {
     pub list_width: f32,
     /// The frontmatter's other fields show under the description.
     pub front_open: bool,
+    /// Whether the folders linked to another of the scope list their skills again.
+    pub twins_open: bool,
 
     pub dialog: Dialog,
     pub pending: Option<Pending>,
@@ -202,6 +204,7 @@ impl App {
             sidebar,
             list_width,
             front_open: false,
+            twins_open: false,
             dialog: Dialog::None,
             pending: None,
             select_open: false,
@@ -656,6 +659,18 @@ impl App {
 
     pub fn reveal(&self, path: &Path) {
         (self.sys.reveal)(path);
+    }
+
+    /// A path as the skill's header shows it: from the root of the project shown when inside
+    /// it (the window's title names the root), else as [`App::tilde`].
+    pub fn short(&self, p: &Path) -> String {
+        let full = self.tilde(p);
+        let inside = self.scope().and_then(|root| {
+            full.strip_prefix(&self.tilde(root))?
+                .strip_prefix('/')
+                .map(str::to_owned)
+        });
+        inside.unwrap_or(full)
     }
 
     /// Writes a path under the home directory with `~`, the home directory as written or with
