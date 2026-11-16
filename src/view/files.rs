@@ -1,6 +1,8 @@
 //! The files of a skill, beside the editor of the one open.
 
-use rune::{El, Key, KeyEvent, PointerPress, ScrollSpec, Tx, col, el, row, text, text_input};
+use rune::{
+    El, Key, KeyEvent, PointerPress, ScrollSpec, TextEdit, Tx, col, el, row, text, text_input,
+};
 use rune_kit::shell::{Sidebar, SidebarRow};
 use rune_kit::syntax::{self, SyntaxTheme};
 use rune_kit::{
@@ -253,6 +255,11 @@ fn editor(s: &App, k: &Kit) -> El {
         .caret(c.text_base, k.selection())
         .spans(spans)
         .on_edit(|s: &mut App| &mut s.doc.edit)
+        // Return breaks the line, keeping its indent; a field would submit on it instead.
+        .on_submit(|s: &mut App, _: &mut Tx| {
+            let break_ = line_break(&s.doc.edit);
+            s.doc.edit.insert(&break_);
+        })
         // Tab indents, as in an editor; Shift-Tab still leaves the field.
         .on_input_key(move |s: &mut App, ev: &KeyEvent, _: &mut Tx| {
             let plain = !(ev.mods.shift || ev.mods.cmd || ev.mods.alt || ev.mods.ctrl);
@@ -272,6 +279,15 @@ fn editor(s: &App, k: &Kit) -> El {
         })
         .child(col().w_full().px(14.0).py(10.0).child(field));
     pane.child(k.scroll_bar(viewport).grow(1.0).min_h(0.0))
+}
+
+/// What Return types at the caret: a line break, then the indent the line has before it.
+fn line_break(edit: &TextEdit) -> String {
+    let (at, _) = edit.range();
+    let before = &edit.text[..at];
+    let line = &before[before.rfind('\n').map_or(0, |i| i + 1)..];
+    let indent = line.len() - line.trim_start_matches([' ', '\t']).len();
+    format!("\n{}", &line[..indent])
 }
 
 /// What Tab types in a file: a tab where the language asks for one, else spaces.
