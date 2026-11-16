@@ -378,6 +378,29 @@ fn a_folder_linked_to_another_folds_until_asked_for() {
     // SKILL.md alone shows without a list beside it.
     f.click("edit");
     assert!(f.rt.find("file-list").is_none() && f.rt.find("new-file").is_some());
+    f.click("editor-close");
+
+    // The link folds wherever it is listed: here the first folder links to the second.
+    let web = f.code.join("web");
+    symlink(web.join(".claude/skills"), &web.join(".agents/skills"));
+    f.rt.update(|s, _| s.reload());
+    f.project("web");
+    f.shows(&[".agents/skills → .claude/skills", ".claude/skills"]);
+    let real = format!("skill:{}", web.join(".claude/skills/deploy").display());
+    assert!(
+        f.rt.find(&real).is_some(),
+        "the real folder lists its skills"
+    );
+}
+
+#[test]
+fn links_to_another_folder_of_the_name_count_once() {
+    let mut f = fixture(true);
+    symlink(f.shared("review"), &f.home.join(".claude/skills/review"));
+    f.rt.update(|s, _| s.reload());
+    f.project("api");
+    f.shows(&["×2"]);
+    f.hides(&["×3"]);
 }
 
 #[test]

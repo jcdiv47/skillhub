@@ -96,8 +96,7 @@ pub fn modal(s: &App, k: &Kit, layer: &mut Vec<El>) {
 
 fn view(s: &App, k: &Kit) -> El {
     // SKILL.md alone needs no list beside it: the editor's bar names it.
-    let alone =
-        matches!(s.files.as_slice(), [f] if s.doc.path.as_deref() == Some(f.path.as_path()));
+    let alone = matches!(s.files.as_slice(), [f] if f.rel == "SKILL.md" && s.doc.path.as_deref() == Some(f.path.as_path()));
     let mut pane = row().key("files").w_full().h_full().min_h(0.0);
     if !alone {
         pane = pane.child(list(s, k).w(208.0).h_full().min_h(0.0)).child(

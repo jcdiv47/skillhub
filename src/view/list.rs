@@ -41,11 +41,17 @@ pub fn view(s: &App, k: &Kit) -> El {
         }
         // A folder that is a link to one listed above holds the same skills: it folds to its
         // title, unless the skill shown is one of its own.
-        let twin = l.real_dir.as_ref().and_then(|real| {
-            locations[..i]
-                .iter()
-                .find(|o| o.real_dir.as_ref() == Some(real))
-        });
+        let twin = l
+            .real_dir
+            .as_ref()
+            .filter(|_| !l.links.is_empty())
+            .and_then(|real| {
+                // The folder the link leads to, else a link to it listed above.
+                locations.iter().enumerate().find(|(j, o)| {
+                    *j != i && o.real_dir.as_ref() == Some(real) && (o.links.is_empty() || *j < i)
+                })
+            })
+            .map(|(_, o)| o);
         let title = rel_dir(l.agent, l.scope);
         let mut section = SidebarSection::new(match twin {
             Some(o) => format!("{title} → {}", rel_dir(o.agent, o.scope)),
@@ -175,14 +181,20 @@ fn marks(s: &App, sk: &Skill, k: &Kit) -> Option<El> {
         );
     }
     // Links to the one folder are one skill; only another folder of the name competes with it.
-    let same: Vec<&Skill> = s
+    let mut same: Vec<&Skill> = Vec::new();
+    for o in s
         .snap
         .as_ref()
         .map(|snap| snap.same(sk, s.scope()))
         .unwrap_or_default()
-        .into_iter()
-        .filter(|o| o.real_path.is_none() || o.real_path != sk.real_path)
-        .collect();
+    {
+        let real = o.real_path.as_ref();
+        if real.is_none()
+            || (real != sk.real_path.as_ref() && same.iter().all(|x| x.real_path.as_ref() != real))
+        {
+            same.push(o);
+        }
+    }
     if !same.is_empty() {
         let mut tip = format!("Also named {}:", sk.name);
         for o in &same {
