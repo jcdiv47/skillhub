@@ -61,7 +61,7 @@ export SKILLHUB_HOME=/tmp/skillhub-fx/home SKILLHUB_CONFIG=/tmp/skillhub-fx/conf
 cargo run -- --list-scenes
 cargo run -- --snap files.png --scene files --theme dark
 cargo run -- --tree tree.json --scene link          # the element tree
-cargo run -- --script drive.json --snap out.png --at mark:end
+cargo run -- --script drive.json --scene link --snap out.png --at mark:end
 ```
 
 A script is timed input by element key, for example
